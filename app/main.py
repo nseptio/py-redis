@@ -1,21 +1,26 @@
-import socket  # noqa: F401
+import asyncio
 
 
-def main():
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!")
-
-    # Uncomment the code below to pass the first stage
-    #
-    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    connection, _ = server_socket.accept()  # wait for client
-
+async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     while True:
-        data = connection.recv(1024)
+        data = await reader.read(1024)
         if not data:
             break
-        connection.sendall(b"+PONG\r\n")
+
+        writer.write(b"+PONG\r\n")
+        await writer.drain()
+
+    writer.close()
+    await writer.wait_closed()
+
+
+async def main():
+    print("Starting Redis-like server on localhost:6379...")
+    server = await asyncio.start_server(handle_client, "localhost", 6379)
+
+    async with server:
+        await server.serve_forever()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
