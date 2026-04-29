@@ -11,27 +11,6 @@ class RESPKind(Enum):
     ERROR = "-"
 
 
-# *2
-# $<len>
-# ECHO <case-insensitive>
-# $<len>
-# <argument>
-
-# *2\r\n    $4\r\n  ECHO\r\n    $3\r\n  hey\r\n
-# ["ECHO", "hey"]
-
-# for _ in range(count):
-#     bulk_line = await reader.readuntil(b"\r\n")
-#     if not bulk_line:
-#         return None
-#     bulk_kind = RESPKind(bulk_line[0:1].decode())
-#     if bulk_kind != RESPKind.BULK_STRING:
-#         raise ValueError("Expected bulk string in array")
-#     length = int(bulk_line[1:-2])
-#     data = await reader.readexactly(length + 2)  # Read data + \r\n
-#     elements.append(data[:-2].decode())  # Remove \r\n
-
-
 async def parse_resp(reader: asyncio.StreamReader) -> Optional[List[bytes]]:
     try:
         line = await reader.readuntil(b"\r\n")  # *2 \r\n
@@ -56,6 +35,8 @@ async def parse_resp(reader: asyncio.StreamReader) -> Optional[List[bytes]]:
                 command_parts.append(string_data[:-2])  # remove trailing
 
             return command_parts
+        elif kind == RESPKind.SIMPLE_STRING:
+            return [line[1:-2]]
         else:
             raise ValueError("Unsupported RESP type")
     except asyncio.IncompleteReadError:
@@ -70,11 +51,10 @@ async def handle_client(
         if not command_parts:
             break
 
-        command = command_parts[0].lower()
+        command = command_parts[0].upper()
         if command == b"PING":
-            # should handle simple string RESP, instead of `b'PING'`
             writer.write(b"+PONG\r\n")
-        elif command == b"echo":
+        elif command == b"ECHO":
             argument = command_parts[1]
             kind = RESPKind.BULK_STRING.value.encode()
             response = kind + f"{len((argument))}\r\n".encode() + argument + b"\r\n"
