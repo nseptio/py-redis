@@ -75,9 +75,9 @@ async def handle_client(
             # should handle simple string RESP, instead of `b'PING'`
             writer.write(b"+PONG\r\n")
         elif command == b"echo":
-            # $3\r\n  hey\r\n
             argument = command_parts[1]
-            response = f"{len((argument))}\r\n".encode() + argument + b"\r\n"
+            kind = RESPKind.BULK_STRING.value.encode()
+            response = kind + f"{len((argument))}\r\n".encode() + argument + b"\r\n"
             writer.write(response)
         else:
             writer.write(b"-ERR unknown command\r\n")
