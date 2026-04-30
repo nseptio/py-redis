@@ -77,7 +77,7 @@ async def handle_client(
                     ttl = int(time.time()) + int(option[1])
                     EXPIRES_STORAGE[key] = ttl
                 elif option == b"PX":
-                    ttl = time.time_ns() + int(option[1])
+                    ttl = time.time_ns() // 1_000_000 + int(option[1])
                     EXPIRES_STORAGE[key] = ttl
             writer.write(b"+OK\r\n")
         elif command == b"GET":
