@@ -74,7 +74,7 @@ async def handle_client(
             if len(options) > 0:
                 option = options[0].upper()
                 if option == b"EX":
-                    ttl = int(time.time()) + int(option[1])
+                    ttl = time.time_ns() // 1_000_000 + int(option[1]) * 1_000
                     EXPIRES_STORAGE[key] = ttl
                 elif option == b"PX":
                     ttl = time.time_ns() // 1_000_000 + int(option[1])
@@ -89,7 +89,7 @@ async def handle_client(
                 return
             ttl = EXPIRES_STORAGE.get(key)
             if ttl is not None:
-                if time.time_ns() > ttl:
+                if time.time_ns() // 1_000_000 > ttl:
                     writer.write(bulk_string_prefix + b"-1\r\n")
                     return
             response = (
