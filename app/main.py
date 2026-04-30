@@ -1,8 +1,10 @@
 import asyncio
+import time
 from enum import Enum
 from typing import List, Optional
 
-DATA = {}
+STORAGE: dict[bytes, bytes] = {}
+EXPIRES_STORAGE: dict[bytes, int] = {}
 
 
 class RESPKind(Enum):
@@ -67,16 +69,29 @@ async def handle_client(
             )
             writer.write(response)
         elif command == b"SET":
-            key, value = command_parts[1], command_parts[2]
-            DATA[key] = value
+            _, key, value, *options = command_parts
+            STORAGE[key] = value
+            if len(options) > 0:
+                option = options[0].upper()
+                if option == b"EX":
+                    ttl = int(time.time()) + int(option[1])
+                    EXPIRES_STORAGE[key] = ttl
+                elif option == b"PX":
+                    ttl = time.time_ns() + int(option[1])
+                    EXPIRES_STORAGE[key] = ttl
             writer.write(b"+OK\r\n")
         elif command == b"GET":
             key = command_parts[1]
-            value = DATA.get(key)
+            value = STORAGE.get(key)
             bulk_string_prefix = RESPKind.BULK_STRING.value.encode()
             if value is None:
                 writer.write(bulk_string_prefix + b"-1\r\n")
                 return
+            ttl = EXPIRES_STORAGE.get(key)
+            if ttl is not None:
+                if time.time_ns() > ttl:
+                    writer.write(bulk_string_prefix + b"-1\r\n")
+                    return
             response = (
                 bulk_string_prefix + f"{len(value)}\r\n".encode() + value + b"\r\n"
             )
