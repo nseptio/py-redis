@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Self, Type
-from util.resp import toSimpleString
+from typing import Callable, Optional, Self, Type
+
+from server_context import RedisString, ServerContext
+from util.resp import toBulkString, toNullBulkString, toSimpleString
 
 
 class RedisCommand(ABC):
     @abstractmethod
-    def execute(self) -> bytes:
+    def execute(self, context: ServerContext) -> bytes:
         raise NotImplementedError("Subclasses must implement this method")
 
     @classmethod
@@ -28,7 +30,7 @@ class CommandRegistry:
 
     @classmethod
     def parse_command(cls, args: list[bytes]) -> RedisCommand:
-        command_name, args = args[0].decode(), args[1:] 
+        command_name, args = args[0].decode(), args[1:]
         command = cls._registry.get(command_name.upper())
         if not command:
             raise RuntimeError(f"Unknown command: {command_name}")
@@ -37,7 +39,7 @@ class CommandRegistry:
 
 @CommandRegistry.register("PING")
 class PingCommand(RedisCommand):
-    def execute(self) -> bytes:
+    def execute(self, context: ServerContext) -> bytes:
         return toSimpleString(b"PONG")
 
     @classmethod
@@ -52,7 +54,7 @@ class PingCommand(RedisCommand):
 class EchoCommand(RedisCommand):
     message: str
 
-    def execute(self) -> bytes:
+    def execute(self, context: ServerContext) -> bytes:
         return toSimpleString(self.message.encode())
 
     @classmethod
@@ -62,46 +64,61 @@ class EchoCommand(RedisCommand):
         return cls(message=args[0].decode())
 
 
+@CommandRegistry.register("SET")
+@dataclass(frozen=True)
 class SetCommand(RedisCommand):
-    def execute(self) -> bytes:
-        # The actual logic for setting the key-value pair will be handled in main.py
+    key: bytes
+    value: bytes
+    px: Optional[int] = None
+
+    def execute(self, context: ServerContext) -> bytes:
+        context.set(self.key, RedisString(self.value), self.px)
         return toSimpleString(b"OK")
 
     @classmethod
     def parse_args(cls, args: list[bytes]) -> Self:
         if len(args) < 2:
             raise RuntimeError("SET command requires at least two arguments")
-        return cls()
+        key, value, *options = args
+        px = None
+        if len(options) > 0:
+            option = options[0].decode().upper()
+            if option not in ("EX", "PX"):
+                raise RuntimeError(
+                    f"SET command: invalid option '{option}', expected EX or PX"
+                )
+            if len(options) < 2:
+                raise RuntimeError(f"SET command: option '{option}' requires a value")
+            ttl_value = int(options[1])
+            match option:
+                case "PX":
+                    px = ttl_value
+                case "EX":
+                    px = ttl_value * 1_000
+                case _:
+                    raise RuntimeError(
+                        f"SET command: invalid option '{option}', expected EX or PX"
+                    )
+        return cls(key=key, value=value, px=px)
 
 
-# if command == b"SET":
-#             _, key, value, *options = command_parts
-#             STORAGE[key] = value
-#             if len(options) > 1:
-#                 option = options[0].upper()
-#                 now = time.time_ns() // 1_000_000
-#                 if option == b"EX":
-#                     ttl = int(options[1]) * 1_000
-#                     EXPIRES_STORAGE[key] = now + ttl
-#                 elif option == b"PX":
-#                     ttl = int(options[1])
-#                     EXPIRES_STORAGE[key] = now + ttl
-#             writer.write(b"+OK\r\n")
-#         elif command == b"GET":
-#             key = command_parts[1]
-#             value = STORAGE.get(key)
-#             bulk_string_prefix = RESPKind.BULK_STRING.value.encode()
-#             if value is None:
-#                 writer.write(bulk_string_prefix + b"-1\r\n")
-#                 continue
-#             ttl = EXPIRES_STORAGE.get(key)
-#             if ttl is not None:
-#                 if time.time_ns() // 1_000_000 >= ttl:
-#                     writer.write(bulk_string_prefix + b"-1\r\n")
-#                     continue
-#             response = (
-#                 bulk_string_prefix + f"{len(value)}\r\n".encode() + value + b"\r\n"
-#             )
-#             writer.write(response)
-#         else:
-#             writer.write(b"-ERR unknown command\r\n")
+@CommandRegistry.register("GET")
+@dataclass(frozen=True)
+class GetCommand(RedisCommand):
+    key: bytes
+
+    def execute(self, context: ServerContext) -> bytes:
+        value = context.get(self.key)
+        if value is None:
+            return toNullBulkString()
+
+        if not isinstance(value, RedisString):
+            raise RuntimeError("WRONGTYPE")
+
+        return toBulkString(value.value)
+
+    @classmethod
+    def parse_args(cls, args: list[bytes]) -> Self:
+        if len(args) != 1:
+            raise RuntimeError("GET command requires exactly one argument")
+        return cls(key=args[0])
