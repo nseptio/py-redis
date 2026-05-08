@@ -36,3 +36,22 @@ class ServerContext:
             return len(val.data.values)
 
         return -1
+
+    def lrange(self, key: bytes, start: int, stop: int) -> list[bytes]:
+        val = self._kv_store.get(key)
+        if val is None:
+            return []
+        if not isinstance(val.data, RedisList):
+            raise RuntimeError("WRONGTYPE Operation against a key holding")
+        if start >= len(val.data.values) or (start >= stop and stop >= 0):
+            return []
+
+        if stop >= len(val.data.values):
+            stop = len(val.data.values) - 1
+
+        if stop < 0:
+            stop = len(val.data.values) + stop
+
+        return val.data.values[
+            start : stop + 1
+        ]  # +1 because stop is inclusive in Redis LRANGE command

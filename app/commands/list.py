@@ -3,6 +3,7 @@ from typing import Self
 
 from state import ServerContext
 from util import to_integer
+from util.encoder import to_array
 
 from .base import RedisCommand
 from .registry import CommandRegistry
@@ -23,3 +24,21 @@ class RPushCommand(RedisCommand):
         if len(args) < 2:
             raise RuntimeError("RPUSH command requires at least two arguments")
         return cls(key=args[0], elements=args[1:])
+
+
+@CommandRegistry.register("LRANGE")
+@dataclass(frozen=True)
+class LRangeCommand(RedisCommand):
+    key: bytes
+    start: int
+    stop: int
+
+    def execute(self, context: ServerContext) -> bytes:
+        elements = context.lrange(self.key, self.start, self.stop)
+        return to_array(elements)
+
+    @classmethod
+    def parse_args(cls, args: list[bytes]) -> Self:
+        if len(args) != 3:
+            raise RuntimeError("LRANGE command requires exactly three arguments")
+        return cls(key=args[0], start=int(args[1]), stop=int(args[2]))
