@@ -37,6 +37,21 @@ class ServerContext:
 
         return -1
 
+    def lpush(self, key: bytes, element: list[bytes]) -> int:
+        val = self._kv_store.get(key)
+        if val is not None and isinstance(val.data, RedisString):
+            raise RuntimeError("WRONGTYPE Operation against a key holding")
+        if val is None:
+            val = RedisValue(data=RedisList())
+            self._kv_store[key] = val
+
+        if isinstance(val.data, RedisList):
+            for i in element:
+                val.data.lpush(i)
+            return len(val.data.values)
+
+        return -1
+
     def lrange(self, key: bytes, start: int, stop: int) -> list[bytes]:
         val = self._kv_store.get(key)
         if val is None:
