@@ -70,3 +70,11 @@ class ServerContext:
         return val.data.values[
             start : stop + 1
         ]  # +1 because stop is inclusive in Redis LRANGE command
+
+    def llen(self, key: bytes) -> int:
+        val = self._kv_store.get(key)
+        if val is None:
+            return 0
+        if not isinstance(val.data, RedisList):
+            raise RuntimeError("WRONGTYPE Operation against a key holding")
+        return len(val.data.values)

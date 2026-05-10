@@ -59,3 +59,19 @@ class LRangeCommand(RedisCommand):
         if len(args) != 3:
             raise RuntimeError("LRANGE command requires exactly three arguments")
         return cls(key=args[0], start=int(args[1]), stop=int(args[2]))
+
+
+@CommandRegistry.register("LLEN")
+@dataclass(frozen=True)
+class LLenCommand(RedisCommand):
+    key: bytes
+
+    def execute(self, context: ServerContext) -> bytes:
+        length = context.llen(self.key)
+        return to_integer(length)
+
+    @classmethod
+    def parse_args(cls, args: list[bytes]) -> Self:
+        if len(args) != 1:
+            raise RuntimeError("LRANGE command requires exactly one arguments")
+        return cls(key=args[0])
