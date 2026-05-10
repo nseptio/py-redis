@@ -75,3 +75,22 @@ class LLenCommand(RedisCommand):
         if len(args) != 1:
             raise RuntimeError("LRANGE command requires exactly one arguments")
         return cls(key=args[0])
+
+
+@CommandRegistry.register("LPOP")
+@dataclass(frozen=True)
+class LPopCommand(RedisCommand):
+    key: bytes
+    count: int = 1
+
+    def execute(self, context: ServerContext) -> bytes:
+        elements = context.lpop(self.key, self.count)
+        return to_array(elements)
+
+    @classmethod
+    def parse_args(cls, args: list[bytes]) -> Self:
+        if len(args) < 1 or len(args) > 2:
+            raise RuntimeError("LPOP command requires one or two arguments")
+        key = args[0]
+        count = int(args[1]) if len(args) == 2 else 1
+        return cls(key=key, count=count)

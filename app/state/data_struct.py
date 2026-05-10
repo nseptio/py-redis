@@ -17,6 +17,11 @@ class RedisList:
     def lpush(self, value: bytes) -> None:
         self.values.insert(0, value)
 
+    def lpop(self) -> Optional[bytes]:
+        if not self.values:
+            return None
+        return self.values.pop(0)
+
 
 RedisDataStruct: TypeAlias = Union[RedisString, RedisList]
 

@@ -78,3 +78,18 @@ class ServerContext:
         if not isinstance(val.data, RedisList):
             raise RuntimeError("WRONGTYPE Operation against a key holding")
         return len(val.data.values)
+
+    def lpop(self, key: bytes, count: int = 1) -> list[bytes]:
+        val = self._kv_store.get(key)
+        if val is None:
+            return []
+        if not isinstance(val.data, RedisList):
+            raise RuntimeError("WRONGTYPE Operation against a key holding")
+
+        popped = []
+        for _ in range(count):
+            element = val.data.lpop()
+            if element is None:
+                break
+            popped.append(element)
+        return popped
